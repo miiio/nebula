@@ -1,17 +1,19 @@
 ﻿using HarmonyLib;
 using NebulaModel.DataStructures;
 using NebulaModel.Logger;
+using NebulaModel.Packets.Logistics;
 using NebulaModel.Packets.Planet;
 using NebulaModel.Packets.Players;
 using NebulaModel.Packets.Trash;
 using NebulaWorld.Factory;
+using NebulaWorld.Logistics;
 using NebulaWorld.MonoBehaviours.Remote;
 using NebulaWorld.Planet;
-using NebulaWorld.Player;
 using NebulaWorld.Trash;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using NebulaWorld.Player;
 
 namespace NebulaWorld
 {
@@ -38,6 +40,9 @@ namespace NebulaWorld
 
         public static void Initialize()
         {
+            StationUIManager.Initialize();
+            ILSShipManager.Initialize();
+            DroneManager.Initialize();
             FactoryManager.Initialize();
             PlanetManager.Initialize();
             Initialized = true;
@@ -168,64 +173,9 @@ namespace NebulaWorld
                     drone.progress = 0f;
                     player.MechaInstance.droneCount = GameMain.mainPlayer.mecha.droneCount;
                     player.MechaInstance.droneSpeed = GameMain.mainPlayer.mecha.droneSpeed;
-                    Mecha myMecha = GameMain.mainPlayer.mecha;
                     if (packet.Stage == 3)
                     {
-                        myMecha.droneLogic.serving.Remove(packet.EntityId);
-                    }
-
-                    if (drone.stage == 1 || drone.stage == 2)
-                    {
-                        //Check if target entity exists as Prebuild
-                        if (GameMain.data.localPlanet.factory.prebuildPool.Length <= -packet.EntityId || GameMain.data.localPlanet.factory.prebuildPool[-packet.EntityId].id == 0)
-                        {
-                            return;
-                        }
-
-                        //Check target prebuild if it is same prebuild that I have. Sometimes it is same ID, but different prebuild
-                        ref PrebuildData prebuildData = ref GameMain.data.localPlanet.factory.prebuildPool[-packet.EntityId];
-                        if (prebuildData.pos.x != packet.EntityPos.x || prebuildData.pos.y != packet.EntityPos.y || prebuildData.pos.z != packet.EntityPos.z)
-                        {
-                            return;
-                        }
-
-                        //Check if my drone is already going there
-                        if (!myMecha.droneLogic.serving.Contains(packet.EntityId))
-                        {
-                            myMecha.droneLogic.serving.Add(packet.EntityId);
-                        }
-                        else
-                        {
-                            //resolve conflict (two drones are going to the same building)
-                            //find my drone that is going there
-                            int priority = 0;
-                            int droneId = 0;
-                            for (int i = 0; i < myMecha.droneCount; i++)
-                            {
-                                if (myMecha.drones[i].stage > 0 && myMecha.drones[i].targetObject == drone.targetObject)
-                                {
-                                    priority = DroneManager.DronePriorities[i];
-                                    droneId = i;
-                                    break;
-                                }
-                            }
-
-                            ref MechaDrone myDrone = ref myMecha.drones[droneId];
-                            //for size comparison sqrMagnitude is fine, since sqrMagnitude, magnitude and the actual distance along the curve are all strictly monotonically increasing
-                            float diff = (myDrone.position - myDrone.target).sqrMagnitude - (drone.position - drone.target).sqrMagnitude;
-                            if (diff > 0 || (diff == 0 && packet.Priority > priority))
-                            {
-                                //my drone is further away (myMagnitude > otherMagnitude = difference positive) and has to return
-                                myDrone.stage = 3;
-                                myDrone.targetObject = 0;
-                            }
-                            else
-                            {
-                                //their drone is further away (otherMagnitude > myMagnitude = difference negative) and has to return
-                                drone.stage = 3;
-                                drone.targetObject = 0;
-                            }
-                        }
+                        GameMain.mainPlayer.mecha.droneLogic.serving.Remove(packet.EntityId);
                     }
                 }
             }
@@ -271,6 +221,33 @@ namespace NebulaWorld
             }
         }
 
+        public static void OnILSShipUpdate(ILSShipData packet)
+        {
+            if (packet.idleToWork)
+            {
+                ILSShipManager.IdleShipGetToWork(packet);
+            }
+            else
+            {
+                ILSShipManager.WorkShipBackToIdle(packet);
+            }
+        }
+
+        public static void OnILSShipItemsUpdate(ILSShipItems packet)
+        {
+            ILSShipManager.AddTakeItem(packet);
+        }
+
+        public static void OnStationUIChange(StationUI packet)
+        {
+            StationUIManager.UpdateUI(packet);
+        }
+
+        public static void OnILSRemoteOrderUpdate(ILSRemoteOrderData packet)
+        {
+            ILSShipManager.UpdateRemoteOrder(packet);
+        }
+
         public static void MineVegetable(VegeMined packet)
         {
             int localPlanetId = -1;
@@ -279,10 +256,6 @@ namespace NebulaWorld
                 if (remotePlayersModels.TryGetValue((ushort)packet.PlayerId, out RemotePlayerModel pModel))
                 {
                     localPlanetId = pModel.Movement.localPlanetId;
-                }
-                else
-                {
-                    Debug.LogWarning("FAILED TO SYNC VEGE DATA");
                 }
             }
 
@@ -303,7 +276,10 @@ namespace NebulaWorld
                     VFEffectEmitter.Emit(vProto.MiningEffect, vData.pos, vData.rot);
                     VFAudio.Create(vProto.MiningAudio, null, vData.pos, true);
                 }
-                factory.RemoveVegeWithComponents(vData.id);
+                using (PlanetManager.EventFromServer.On())
+                {
+                    factory.RemoveVegeWithComponents(vData.id);
+                }
             }
             else // veins
             {
@@ -336,8 +312,10 @@ namespace NebulaWorld
                             VFEffectEmitter.Emit(vProto.MiningEffect, vData.pos, Maths.SphericalRotation(vData.pos, 0f));
                             VFAudio.Create(vProto.MiningAudio, null, vData.pos, true);
                         }
-
-                        factory.RemoveVeinWithComponents(vData.id);
+                        using (PlanetManager.EventFromServer.On())
+                        {
+                            factory.RemoveVeinWithComponents(vData.id);
+                        }
                     }
                 }
             }

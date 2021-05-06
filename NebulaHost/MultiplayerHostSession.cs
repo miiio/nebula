@@ -98,6 +98,11 @@ namespace NebulaHost
             PlayerManager.SendPacketToPlanet(packet, planetId);
         }
 
+        public void SendPacketToStar<T>(T packet, int starId) where T : class, new()
+        {
+            PlayerManager.SendPacketToStar(packet, starId);
+        }
+
         private void Update()
         {
             gameStateUpdateTimer += Time.deltaTime;
@@ -116,7 +121,7 @@ namespace NebulaHost
                 if (GameMain.data.history.currentTech != 0)
                 {
                     TechState state = GameMain.data.history.techStates[GameMain.data.history.currentTech];
-                    SendPacket(new GameHistoryResearchUpdatePacket(GameMain.data.history.currentTech, state.hashUploaded));
+                    SendPacket(new GameHistoryResearchUpdatePacket(GameMain.data.history.currentTech, state.hashUploaded, state.hashNeeded));
                 }
             }
 
@@ -149,7 +154,7 @@ namespace NebulaHost
                     return;
                 }
 
-                NebulaModel.Logger.Log.Info($"Client connected ID: {ID}, {Context.UserEndPoint}");
+                NebulaModel.Logger.Log.Info($"Client connected ID: {ID}");
                 NebulaConnection conn = new NebulaConnection(Context.WebSocket, Context.UserEndPoint, packetProcessor);
                 playerManager.PlayerConnected(conn);
             }
@@ -167,7 +172,7 @@ namespace NebulaHost
                 if (e.Code == (short)DisconnectionReason.HostStillLoading)
                     return;
 
-                NebulaModel.Logger.Log.Info($"Client disconnected: {Context.UserEndPoint}, reason: {e.Reason}");
+                NebulaModel.Logger.Log.Info($"Client disconnected: {ID}, reason: {e.Reason}");
                 UnityDispatchQueue.RunOnMainThread(() =>
                 {
                     playerManager.PlayerDisconnected(new NebulaConnection(Context.WebSocket, Context.UserEndPoint, packetProcessor));

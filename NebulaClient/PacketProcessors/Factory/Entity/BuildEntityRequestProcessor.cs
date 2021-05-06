@@ -22,6 +22,7 @@ namespace NebulaClient.PacketProcessors.Factory.Entity
                 using (FactoryManager.EventFromServer.On())
                 {
                     FactoryManager.EventFactory = planet.factory;
+                    FactoryManager.TargetPlanet = packet.PlanetId;
                     FactoryManager.PacketAuthor = packet.AuthorId;
 
                     // Physics could be null, if the host is not on the requested planet
@@ -34,14 +35,10 @@ namespace NebulaClient.PacketProcessors.Factory.Entity
                         planet.audio.Init();
                     }
 
-                //Remove building from drone queue
-                GameMain.mainPlayer.mecha.droneLogic.serving.Remove(-packet.PrebuildId);
-                planet.factory.BuildFinally(GameMain.mainPlayer, packet.PrebuildId);
-                if (!DroneManager.RemoveBuildRequest(-packet.PrebuildId))
-                {
-                    Log.Warn($"Build Request was not succesfully removed.");
-                }
+                    //Remove building from drone queue
+                    GameMain.mainPlayer.mecha.droneLogic.serving.Remove(-packet.PrebuildId);
                     planet.factory.BuildFinally(GameMain.mainPlayer, packet.PrebuildId);
+                    DroneManager.RemoveBuildRequest(-packet.PrebuildId);
 
                     // Make sure to free the physics once the FlattenTerrain is done
                     if (packet.PlanetId != GameMain.localPlanet?.id)
@@ -54,6 +51,7 @@ namespace NebulaClient.PacketProcessors.Factory.Entity
                     }
                     FactoryManager.PacketAuthor = -1;
                     FactoryManager.EventFactory = null;
+                    FactoryManager.TargetPlanet = FactoryManager.PLANET_NONE;
                 }
             }
         }

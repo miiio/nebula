@@ -24,6 +24,7 @@ namespace NebulaHost.PacketProcessors.Factory.Entity
                 PlanetData planet = GameMain.galaxy.PlanetById(packet.PlanetId);
                 FactoryManager.EventFactory = planet.factory;
                 FactoryManager.PacketAuthor = packet.AuthorId;
+                FactoryManager.TargetPlanet = packet.PlanetId;
 
                 // Physics could be null, if the host is not on the requested planet
                 // Make sure to init all the planet data required to perform the BuildFinally of the distant planet
@@ -34,11 +35,6 @@ namespace NebulaHost.PacketProcessors.Factory.Entity
 
                     planet.audio = new PlanetAudio(planet);
                     planet.audio.Init();
-
-                    if (AccessTools.Field(typeof(CargoTraffic), "beltRenderingBatch").GetValue(planet.factory.cargoTraffic) == null)
-                    {
-                        planet.factory.cargoTraffic.CreateRenderingBatches();
-                    }
                 }
 
                 //Remove building from drone queue
@@ -56,6 +52,7 @@ namespace NebulaHost.PacketProcessors.Factory.Entity
                 }
                 FactoryManager.EventFactory = null;
                 FactoryManager.PacketAuthor = -1;
+                FactoryManager.TargetPlanet = FactoryManager.PLANET_NONE;
             }
         }
     }
